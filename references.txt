@@ -1,0 +1,36 @@
+References
+
+Background – Enron Case:
+https://en.wikipedia.org/wiki/Enron
+
+https://www.cs.cmu.edu/~./enron/
+
+Machine Learning – Background and Documentation of algorithms:
+https://en.wikipedia.org/wiki/Machine_learning
+
+http://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KNeighborsClassifier.html
+
+http://scikit-learn.org/stable/modules/pipeline.html
+
+http://scikit-learn.org/stable/modules/generated/sklearn.tree.DecisionTreeClassifier.html#sklearn.tree.DecisionTreeClassifier
+
+http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html#sklearn.ensemble.RandomForestClassifier
+
+http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html#sklearn.ensemble.AdaBoostClassifier
+
+Outliers:
+http://www.itl.nist.gov/div898/handbook/prc/section1/prc16.htm
+
+Features Creation & Selection:
+https://discussions.udacity.com/t/mistake-in-the-way-email-poi-features-are-engineered-in-the-course/4841/2
+
+Guyon, I. (2003) "An Introduction to Variable and Feature Selection", The Journal of Machine Learning Research, Vol. 3, pp. 1157-1182
+
+Evaluation of Algorithms:
+http://scikit-learn.org/stable/modules/generated/sklearn.metrics.f1_score.html
+
+Validation:
+http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.KFold.html#sklearn.cross_validation.KFold
+
+
+
