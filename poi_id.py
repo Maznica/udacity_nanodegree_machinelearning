@@ -6,7 +6,7 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import tree
-from sklearn.cross_validation import train_test_split, KFold
+from sklearn.cross_validation import train_test_split, StratifiedShuffleSplit
 from sklearn.feature_selection import SelectKBest,f_classif
 from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score
 from sklearn.naive_bayes import GaussianNB
@@ -14,6 +14,9 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.grid_search import GridSearchCV
+import operator
+import math
+from itertools import combinations, product
 
 sys.path.append("../tools/")
 
@@ -25,8 +28,7 @@ from tester import dump_classifier_and_data
 ### Task 1: Select what features you'll use.
 ### features_list is a list of strings, each of which is a feature name.
 ### The first feature must be "poi".
-features_list = ['poi','fraction_to_poi','total_stock_value',\
-'shared_receipt_with_poi','bonus'] 
+features_list = ['poi','exercised_stock_options','bonus'] 
 
 
 ### Load the dictionary containing the dataset
@@ -210,8 +212,6 @@ for item in dict_per_missing:
         missing_outliers[item]=dict_per_missing[item]
 
 missing_outliers  
-
-
 
 ### Task 2: Remove outliers
 
@@ -506,7 +506,7 @@ third_round=feature_select_fct(labels_select_3,features_select_3,features_select
 ##########
 # SelectKbest
 
-def feature_select_kbest(labels,features,listing,repition):
+def feature_select_kbest(labels,features,listing,repition,k_num):
     dictionary=dict_feature(listing)
     result={}
     i=0
@@ -514,8 +514,8 @@ def feature_select_kbest(labels,features,listing,repition):
         # split the data into train and test
         features_train, features_test, labels_train, labels_test = \
         train_test_split(features, labels, test_size=0.3)
-        # perform decision tree classifier
-        kbest=SelectKBest(f_classif,k=10)
+        # perform selectKBest
+        kbest=SelectKBest(f_classif,k=k_num)
         f_new = kbest.fit(features_train,labels_train)
         # Generate the importances
         importances= f_new.scores_
@@ -526,7 +526,73 @@ def feature_select_kbest(labels,features,listing,repition):
         result[item]=dictionary[item]/repition
     return result
 
-feature_select_kbest(labels_select,features_select,features_select_list,1000.0)
+trial = feature_select_kbest(labels_select,features_select,features_select_list,1000.0,5)
+
+
+# Create labels and features for testing performance of Importances DT
+
+def create_imp_l_f(labels,features,listing,repition,k_num):
+    result=['poi']
+    trial=feature_select_fct(labels,features,listing,repition)
+    sort_trial=sorted(trial.items(),key=operator.itemgetter(1))
+    sort_trial.reverse()
+    for item in sort_trial:
+        if math.isnan(item[1]):
+            sort_trial.remove(item)
+    sort_trial=sort_trial[:k_num]
+    for item in sort_trial:
+        result += [item[0]] 
+    data = featureFormat(data_dict, result)
+    lab, feat = targetFeatureSplit(data)
+    return lab, feat
+
+
+
+# Create labels and features for testing performance of SeleckKBest
+def create_l_f(labels,features,listing,repition,k_num):
+    result=['poi']
+    trial=feature_select_kbest(labels,features,listing,repition,k_num)
+    sort_trial=sorted(trial.items(),key=operator.itemgetter(1))
+    sort_trial.reverse()
+    for item in sort_trial:
+        if math.isnan(item[1]):
+            sort_trial.remove(item)
+    sort_trial=sort_trial[:k_num]
+    for item in sort_trial:
+        result += [item[0]] 
+    data = featureFormat(data_dict, result)
+    lab, feat = targetFeatureSplit(data)
+    return lab, feat
+
+###########
+# Evaluation of algorithm by different kbest - see the section after
+# crossvalidation function      
+# Based on the results from that we can see that following features
+# might play an important role 'exercised_stock_options', 'bonus',
+#'shared_receipt_with_poi', 'total_stock_value', 'expenses', 'other',
+#'fraction_to_poi'
+
+features_combi =['exercised_stock_options', 'bonus',
+'shared_receipt_with_poi', 'total_stock_value', 'expenses', 'other',
+'fraction_to_poi']
+
+def all_comb(listing):
+    comb=['poi']
+    result=[]
+    for item in listing:
+        comb += [item]
+        result += [comb]
+        comb=['poi']
+    # All other combinations
+    for i in range(2,len(listing)+1):
+        for item in combinations(listing,i):
+            comb += list(item)
+            result += [comb]
+            comb=['poi']
+    return result
+    
+
+# Examination of each combination on the f1 score follows after crossvalidation
 
 
 #####################
@@ -534,8 +600,6 @@ feature_select_kbest(labels_select,features_select,features_select_list,1000.0)
 
 data = featureFormat(my_dataset, features_list, sort_keys = True)
 labels, features = targetFeatureSplit(data)
-
-
 
 #######################
 # Split in training / testing dataset
@@ -555,7 +619,7 @@ features_train, features_test, labels_train, labels_test = \
 # Provided to give you a starting point. Try a variety of classifiers.
 
 
-# KFold crossvalidation and storage of the evaluation metrics
+# StratifiedShuffleSplit crossvalidation and storage of the evaluation metrics
 
 def crossvalidation(classifier, features, labels,clf_string):
     accuracy=[]
@@ -564,9 +628,13 @@ def crossvalidation(classifier, features, labels,clf_string):
     f1score=[]
     test_size=[]
     n_pois=[]
+    t_pos=[]
+    f_pos=[]
+    t_neg=[]
+    f_neg=[]
 
     # kfold
-    kf=KFold(len(features),3,random_state=40) 
+    kf=StratifiedShuffleSplit(labels,1000,test_size=0.3,random_state=40) 
     for train_indices, test_indices in kf:
         #make training and testing datasets
         features_train=[features[ii] for ii in train_indices]
@@ -578,34 +646,123 @@ def crossvalidation(classifier, features, labels,clf_string):
         pred=classifier.predict(features_test)
         
         # Evaluation metrics
-        acc = accuracy_score(labels_test,pred)
-        prec=precision_score(labels_test,pred)
         rec=recall_score(labels_test,pred)
-        f1=f1_score(labels_test,pred)
         size=len(labels_test)
         pois=sum(labels_test)
+        true_pos =rec*pois
+        false_neg=pois-true_pos
+        false_pos=sum(pred)-true_pos
+        true_neg=size-true_pos-false_neg-false_pos
         
         # Store the evaluations
-        accuracy  += [acc]
-        precision += [prec]
-        recall    += [rec]
-        f1score   += [f1]
-        test_size      += [size]
-        n_pois    += [pois] 
+
+        test_size += [size]
+        n_pois    += [pois]
+        t_pos     += [true_pos]
+        f_pos     += [false_pos]
+        t_neg     += [true_neg]
+        f_neg     += [false_neg]
         
     # Create averages
-    accuracy  += [sum(accuracy)/len(accuracy)]
-    precision += [sum(precision)/len(precision)]
-    recall    += [sum(recall)/len(recall)]
-    f1score   += [sum(f1score)/len(f1score)]
+    test_size = sum(test_size)
+    n_pois    = sum(n_pois)
+    t_pos     = sum(t_pos)
+    f_pos     = sum(f_pos)
+    t_neg     = sum(t_neg)
+    f_neg     = sum(f_neg)
+    accuracy  = 1.0*(t_pos+t_neg)/test_size
+    precision = 1.0*t_pos/(t_pos+f_pos)
+    recall    = 1.0*t_pos/(t_pos+f_neg)
+    f1score   = 2.0*t_pos/(2*t_pos+f_pos+f_neg)
 
     print "The accuracy score by " + clf_string + ": " + str(accuracy)
     print "Precision by " + clf_string + ": " + str(precision)
     print "Recall by " + clf_string + ": " + str(recall)
     print "F1 score by " + clf_string + ": " + str(f1score)
+    print "The number of true positives by " + clf_string + ": " + str(t_pos)
+    print "The number of false positives by " + clf_string + ": " + str(f_pos)
+    print "The number of true negatives by " + clf_string + ": " + str(t_neg)
+    print "The number of false negatives by " + clf_string + ": " + str(f_neg)
+    print "---------------------------------------------"
 
-    return accuracy,precision,recall,f1score,test_size,n_pois
+    return accuracy,precision,recall,f1score,test_size,n_pois,t_pos,f_pos,t_neg,f_neg
 
+
+
+
+
+#####################
+# Features Selection - Performance by different kbest
+####################
+
+# Performance testing of importances DT
+
+def perf_importances(classifier,labels,features,listing,repition,clf_string):
+    k_list=[]
+    prec_list=[]
+    rec_list=[]
+    f1_list=[]
+    for i in range(1,20):
+        lab,feat=create_imp_l_f(labels,features,listing,repition,i)
+        temp_result=crossvalidation(classifier,feat,lab,clf_string)
+        k_list += [i]
+        prec_list +=[temp_result[1]]
+        rec_list +=[temp_result[2]]
+        f1_list +=[temp_result[3]]
+    return k_list,prec_list,rec_list,f1_list
+
+
+# Performance testing of kbest
+
+def perf_kbest(classifier,labels,features,listing,repition,clf_string):
+    k_list=[]
+    prec_list=[]
+    rec_list=[]
+    f1_list=[]
+    for i in range(1,20):
+        lab,feat=create_l_f(labels,features,listing,repition,i)
+        temp_result=crossvalidation(classifier,feat,lab,clf_string)
+        k_list += [i]
+        prec_list +=[temp_result[1]]
+        rec_list +=[temp_result[2]]
+        f1_list +=[temp_result[3]]
+    return k_list,prec_list,rec_list,f1_list
+    
+# Feature Selection can be found by each Classifier separately
+    
+
+#################
+# What features are important
+
+
+def score_comb(listing, dataset, classifier,repition,clf_string):
+    combination=all_comb(listing)
+    dictionary=dict((tuple(item), {}) for item in combination)
+
+    # Store the results
+    for item in combination:
+        data = featureFormat(my_dataset, item, sort_keys = True)
+        labels, features = targetFeatureSplit(data)
+        temp_result=crossvalidation(classifier,features,labels,clf_string)
+        dictionary[tuple(item)]['precision']=temp_result[1]
+        dictionary[tuple(item)]['recall']=temp_result[2]
+        dictionary[tuple(item)]['f1score']=temp_result[3]
+    return dictionary
+        
+
+# Find max f1 score
+
+def max_f1_find(listing, dataset, classifier,repition,clf_string):
+    dictionary=score_comb(listing, dataset, classifier,repition,clf_string)
+    maximum=0
+    result={}
+
+    for item in dictionary.keys():
+        if dictionary[item]['f1score']>=maximum:
+            maximum=dictionary[item]['f1score']
+            key=item
+    result[key]=dictionary[key]
+    return result
 
 
 ##############################
@@ -615,12 +772,87 @@ def crossvalidation(classifier, features, labels,clf_string):
 nb=GaussianNB()
 crossvalidation(nb,features,labels,"Gausian NB")
 
+# feature selection
+
+# importances
+k,p_k,r_k,f_k= perf_importances(nb,labels_select,features_select,features_select_list,1000.0,"Gausian NB")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features (DT Importance)")
+plt.ylabel("Score")
+plt.legend(loc='upper left')
+plt.title(" Feature Importances and Evaluation Metrics by Gaussian NB")
+plt.savefig("k_imp_NB.png")
+plt.show()
+
+
+# kbest
+k,p_k,r_k,f_k= perf_kbest(nb,labels_select,features_select,features_select_list,1000.0,"Gausian NB")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features")
+plt.ylabel("Score")
+plt.legend(loc='upper left')
+plt.title("K best Features and Evaluation Metrics by Gaussian NB")
+plt.savefig("kbest_NB.png")
+plt.show()
+
+# find optimal combi
+
+max_f1_find(features_combi, my_dataset, nb,1000,"Gaussian NB")
+
+
 ##############################
 # Decision Tree
 #################################
 
 dt=tree.DecisionTreeClassifier(random_state=40)
 crossvalidation(dt,features,labels,"default decision tree")
+
+###############
+# Comment out due to performance
+
+"""
+
+# importances
+k,p_k,r_k,f_k= perf_importances(dt,labels_select,features_select,features_select_list,1000.0,"default decision tree")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features (DT Importance)")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title(" Feature Importances and Evaluation Metrics by Default Decision Tree")
+plt.savefig("k_imp_DT.png")
+plt.show()
+
+# kbest
+k,p_k,r_k,f_k= perf_kbest(dt,labels_select,features_select,features_select_list,1000.0,"default decision tree")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title("K best Features and Evaluation Metrics by Default Decision Tree")
+plt.savefig("kbest_DT.png")
+plt.show()
+
+
+# find optimal combi
+
+max_f1_find(features_combi, my_dataset, dt,1000,"default decision tree")
+"""
 
 ##############################
 # KNN
@@ -629,6 +861,42 @@ crossvalidation(dt,features,labels,"default decision tree")
 neigh = KNeighborsClassifier()
 crossvalidation(neigh,features,labels,"default KNN")
 
+###############
+# Comment out due to performance
+"""
+# importances
+k,p_k,r_k,f_k= perf_importances(neigh,labels_select,features_select,features_select_list,1000.0,"default KNN")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features (DT Importance)")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title(" Feature Importances and Evaluation Metrics by Default KNN")
+plt.savefig("k_imp_KNN.png")
+plt.show()
+
+# kbest
+k,p_k,r_k,f_k= perf_kbest(neigh,labels_select,features_select,features_select_list,1000.0,"default KNN")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title("K best Features and Evaluation Metrics by default KNN")
+plt.savefig("kbest_knn.png")
+plt.show()
+
+# find optimal combi
+
+max_f1_find(features_combi, my_dataset, neigh,1000,"default KNN")
+"""
+
 ##############################
 # Random Forest
 #################################
@@ -636,12 +904,86 @@ crossvalidation(neigh,features,labels,"default KNN")
 random_f=RandomForestClassifier(random_state=40)
 crossvalidation(random_f,features,labels,"default random forest")
 
+###############
+# Comment out due to performance
+"""
+# importances
+k,p_k,r_k,f_k= perf_importances(random_f,labels_select,features_select,features_select_list,1000.0,"default random forest")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features (DT Importance)")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title(" Feature Importances and Evaluation Metrics by Default Random Forest")
+plt.savefig("k_imp_RF.png")
+plt.show()
+
+# kbest
+k,p_k,r_k,f_k= perf_kbest(random_f,labels_select,features_select,features_select_list,1000.0,"default random forest")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title("K best Features and Evaluation Metrics by Default Random Forest")
+plt.savefig("kbest_RF.png")
+plt.show()
+
+
+# find optimal combi
+
+max_f1_find(features_combi, my_dataset, random_f,1000,"default random forest")
+"""
+
 #####################################
 # Adaboost
 #####################################
 
 adaboost=AdaBoostClassifier(random_state=40)
 crossvalidation(adaboost,features,labels,"default adaboost")
+
+###############
+# Comment out due to performance
+"""
+# importances
+k,p_k,r_k,f_k= perf_importances(dt,labels_select,features_select,features_select_list,1000.0,"default adaboost")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features (DT Importance)")
+plt.ylabel("Score")
+plt.legend(loc='upper right')
+plt.title(" Feature Importances and Evaluation Metrics by Default Adaboost")
+plt.savefig("k_imp_adaboost.png")
+plt.show()
+
+# kbest
+k,p_k,r_k,f_k= perf_kbest(adaboost,labels_select,features_select,features_select_list,1000.0,"default adaboost")
+
+plt.plot(k,p_k,"g",label='Precision')
+plt.plot(k,r_k,"b",label='Recall')
+plt.plot(k,f_k,"r",label='F1 Score')
+plt.xticks(k,k)
+plt.xlabel("K best Features")
+plt.ylabel("Score")
+plt.legend(loc='upper center')
+plt.title("K best Features and Evaluation Metrics by Default Adaboost")
+plt.savefig("kbest_adaboost.png")
+plt.show()
+
+
+# find optimal combi
+
+max_f1_find(features_combi, my_dataset, adaboost,1000,"default adaboost")
+"""
 
 ### Task 5: Tune your classifier to achieve better than .3 precision and recall 
 ### using our testing script. Check the tester.py script in the final project
@@ -651,39 +993,46 @@ crossvalidation(adaboost,features,labels,"default adaboost")
 ### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
 
 ######
-# Decision Tree - optimized - usage of Gridsearch CV
+#  Tuning parameters  - Decision Tree GridCV
 
+  
 param_grid = {
          'criterion': ['gini','entropy'],
-         'min_samples_split': [2,6,10,20,50,100,400],
+         'min_samples_split': [2,6,10,20,50],
           }
-clf_opt = GridSearchCV(tree.DecisionTreeClassifier(random_state=40), param_grid,scoring="f1")
-clf_opt = clf_opt.fit(features_train, labels_train)
+
+cv=StratifiedShuffleSplit(labels,1000,test_size=0.3,random_state=40)
+
+clf_opt = GridSearchCV(tree.DecisionTreeClassifier(random_state=40), param_grid,scoring="f1",cv=cv)
+clf_opt=clf_opt.fit(features,labels)
 print "Best estimator found by grid search:"
 print clf_opt.best_estimator_
 
-clf=tree.DecisionTreeClassifier(criterion='entropy',random_state=40)
 
-crossvalidation(clf,features,labels,"optimized decision tree")
 
 
 ############
-# Random forest - optimized - usage of Gridsearch CV
+# Random forest - optimized 
 
+###############
+# Comment out due to performance
+"""
 param_grid = {
          'criterion': ['gini','entropy'],
-         'min_samples_split': [2,6,10,20,50,100,400],
-         'n_estimators': [2,5,10,20,50,80,100,200,300],
+         'min_samples_split': [2,6,10,20,50],
+         'n_estimators': [2,5,10,20,50,80],
           }
-clf_opt = GridSearchCV(RandomForestClassifier(random_state=40), param_grid,scoring="f1")
-clf_opt = clf_opt.fit(features_train, labels_train)
+       
+clf_opt = GridSearchCV(RandomForestClassifier(random_state=40), param_grid,scoring="f1",cv=cv)
+clf_opt=clf_opt.fit(features,labels)
 print "Best estimator found by grid search:"
 print clf_opt.best_estimator_
+"""
 
-random_f_opt=RandomForestClassifier(min_samples_split=20, n_estimators=50, \
-            random_state=40)
+clf=RandomForestClassifier(min_samples_split=2, n_estimators=50, \
+            random_state=40,criterion='entropy')
 
-crossvalidation(random_f_opt,features,labels,"optimized random forest")
+crossvalidation(clf,features,labels,"optimized random forest")
 
 
 ###################
@@ -693,15 +1042,27 @@ crossvalidation(random_f_opt,features,labels,"optimized random forest")
 ###################
 # No POI's featrues
 
-features_list_ap1 = ['poi','total_stock_value',\
+features_list_ap1 = ['poi','fraction_to_poi',\
 'bonus','exercised_stock_options'] 
 
 data_ap1 = featureFormat(data_dict, features_list_ap1, sort_keys = True)
 labels_ap1, features_ap1 = targetFeatureSplit(data_ap1)
 
 
-# The best performing algorithm is Naive Bayes
-crossvalidation(nb,features_ap1,labels_ap1,"default naive bayes")
+# Comparison with and without fraction to poi by DT and RF
+
+crossvalidation(dt,features_ap1,labels_ap1,"default decision tree")
+crossvalidation(clf,features_ap1,labels_ap1,"optimized random forest")
+
+"""
+# Optimal Random Forest in this case
+
+rf_optimal=RandomForestClassifier(min_samples_split=6, n_estimators=2, \
+            random_state=40)
+
+crossvalidation(rf_optimal,features_ap1,labels_ap1,"optimized random forest")
+
+"""
 
 #################
 # PCA Analysis
@@ -731,21 +1092,24 @@ estimators = [('reduce_dim', PCA()), ('nb', GaussianNB())]
 
 clf_prep = Pipeline(estimators)
 
-# Optimizing
+# Optimizing - After trying out different algorithms I have ended up with NB
 
 param_grid = {
          'reduce_dim__n_components': [2,4,5,10,14,20],
           }
 
-clf_opt = GridSearchCV(clf_prep, param_grid,scoring="f1")
-clf_opt = clf_opt.fit(features_ptrain, labels_ptrain)
+cv_pca=StratifiedShuffleSplit(labels_pca,1000,test_size=0.3,random_state=40)
+
+clf_opt = GridSearchCV(clf_prep, param_grid,scoring="f1",cv=cv_pca)
+clf_opt = clf_opt.fit(features_pca, labels_pca)
 print "Best estimator found by grid search:"
 print clf_opt.best_estimator_ 
 
 ############
 # Optimal
 
-estimators_opt = [('reduce_dim', PCA(n_components=10)),('nb',GaussianNB())]
+estimators_opt = [('reduce_dim', PCA(n_components=2)),\
+('nb',GaussianNB())]
 
 clf_pca=Pipeline(estimators_opt)
 

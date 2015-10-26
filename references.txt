@@ -1,4 +1,4 @@
-References
+1. References
 
 Background – Enron Case:
 https://en.wikipedia.org/wiki/Enron
@@ -18,6 +18,7 @@ http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestCl
 
 http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html#sklearn.ensemble.AdaBoostClassifier
 
+
 Outliers:
 http://www.itl.nist.gov/div898/handbook/prc/section1/prc16.htm
 
@@ -31,6 +32,16 @@ http://scikit-learn.org/stable/modules/generated/sklearn.metrics.f1_score.html
 
 Validation:
 http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.KFold.html#sklearn.cross_validation.KFold
+http://stackoverflow.com/questions/16296643/convert-tuple-to-list-and-back
 
+http://scikit-learn.org/stable/modules/cross_validation.html
+http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
 
+Tuning:
+http://machinelearningmastery.com/how-to-improve-machine-learning-results/
+
+Miscelaneous:
+http://stackoverflow.com/questions/18201690/get-unique-combinations-of-elements-from-a-python-list
+
+http://stackoverflow.com/questions/16221368/creating-dictionary-of-dictionaries-in-python-2-6
 
